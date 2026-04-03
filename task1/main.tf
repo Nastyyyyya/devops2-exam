@@ -26,19 +26,19 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-# 1. Створення VPC
-data "digitalocean_vpc" "vpc" {
-  name = "paslavska-vpc" 
+# 1. Отримання даних про вже існуючу VPC
+data "digitalocean_vpc" "existing_vpc" {
+  name = "paslavska-vpc"
 }
 
-# 2. Створення Droplet (ВМ)
+# 2. Створення Droplet 
 resource "digitalocean_droplet" "node" {
   name     = "paslavska-node"
   region   = "fra1"
-  size     = "s-2vcpu-4gb"
-  image    = "ubuntu-24-04-x64"
+  size     = "s-2vcpu-4gb" # 
+  image    = "ubuntu-24-04-x64" 
 
-  vpc_uuid = digitalocean_vpc.vpc.id
+  vpc_uuid = data.digitalocean_vpc.existing_vpc.id
 }
 
 # 3. Налаштування Firewall
