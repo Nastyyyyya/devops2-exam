@@ -5,14 +5,20 @@ terraform {
       version = "~> 2.0"
     }
   }
-  # Зберігання стану у хмарі 
+
+  # Оновлений backend для DigitalOcean Spaces
   backend "s3" {
-    endpoint                    = "fra1.digitaloceanspaces.com"
-    region                      = "us-east-1" 
-    bucket                      = "paslavska-bucket" 
-    key                         = "terraform.tfstate"
+    endpoint = "https://fra1.digitaloceanspaces.com"
+    region   = "us-east-1"
+
+    bucket = "paslavska-bucket"
+    key    = "terraform.tfstate"
+
+    # Критично важливі параметри для DO Spaces
     skip_credentials_validation = true
     skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
   }
 }
 
@@ -22,53 +28,57 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-# 1. VPC (Віртуальна приватна хмара)
+# 1. Створення VPC
 resource "digitalocean_vpc" "vpc" {
-  name     = "paslavska-vpc" 
-  region   = "fra1" 
+  name     = "paslavska-vpc"
+  region   = "fra1"
   ip_range = "10.10.10.0/24"
 }
 
-# 2. Droplet (Віртуальна машина)
+# 2. Створення Droplet (ВМ)
 resource "digitalocean_droplet" "node" {
-  name     = "paslavska-node" 
-  region   = "fra1" 
-  size     = "s-2vcpu-4gb" # Системні вимоги для Minikube 
-  image    = "ubuntu-24-04-x64" 
+  name     = "paslavska-node"
+  region   = "fra1"
+  size     = "s-2vcpu-4gb"
+  image    = "ubuntu-24-04-x64"
+
   vpc_uuid = digitalocean_vpc.vpc.id
 }
 
-# 3. Firewall (Фаєрвол)
+# 3. Налаштування Firewall
 resource "digitalocean_firewall" "firewall" {
-  name        = "paslavska-firewall" 
+  name        = "paslavska-firewall"
   droplet_ids = [digitalocean_droplet.node.id]
 
-  # Вхідні правила
+  # Вхідні підключення
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
     source_addresses = ["0.0.0.0/0"]
   }
+
   inbound_rule {
     protocol         = "tcp"
     port_range       = "80"
     source_addresses = ["0.0.0.0/0"]
   }
+
   inbound_rule {
     protocol         = "tcp"
     port_range       = "443"
     source_addresses = ["0.0.0.0/0"]
   }
+
   inbound_rule {
     protocol         = "tcp"
-    port_range       = "8000-8003" 
+    port_range       = "8000-8003"
     source_addresses = ["0.0.0.0/0"]
   }
 
-  # Вихідні правила
+  # Вихідні підключення (всі порти)
   outbound_rule {
     protocol              = "tcp"
-    port_range            = "1-65535" 
-    destination_addresses = ["0.0.0.0/0"]
+    port_range            = "1-65535"
+    destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 }
