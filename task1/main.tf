@@ -6,7 +6,6 @@ terraform {
     }
   }
 
-  # Оновлений backend для DigitalOcean Spaces
   backend "s3" {
     endpoint = "https://fra1.digitaloceanspaces.com"
     region   = "us-east-1"
@@ -14,7 +13,6 @@ terraform {
     bucket = "paslavska-bucket"
     key    = "terraform.tfstate"
 
-    # Критично важливі параметри для DO Spaces
     skip_credentials_validation = true
     skip_metadata_api_check     = true
     skip_region_validation      = true
@@ -29,10 +27,8 @@ provider "digitalocean" {
 }
 
 # 1. Створення VPC
-resource "digitalocean_vpc" "vpc" {
-  name     = "paslavska-vpc"
-  region   = "fra1"
-  ip_range = "10.10.10.0/24"
+data "digitalocean_vpc" "vpc" {
+  name = "paslavska-vpc" 
 }
 
 # 2. Створення Droplet (ВМ)
