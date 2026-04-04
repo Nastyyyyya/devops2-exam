@@ -1,7 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-{{ ENV_TYPE }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-{{ ENV_TYPE }}
+  namespace: ns-{{ ENV_TYPE }}
 spec:
   replicas: 1
   selector:
@@ -15,19 +21,20 @@ spec:
       containers:
       - name: application
         image: {{ IMAGE_TAG }}
+        imagePullPolicy: Always
         ports:
-        - containerPort: 8080
+        - containerPort: 8000
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: app-service-{{ ENV_TYPE }}
+  namespace: ns-{{ ENV_TYPE }}
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: my-app-{{ ENV_TYPE }}
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8080
-      nodePort: {{ NODE_PORT }}
+      targetPort: 8000

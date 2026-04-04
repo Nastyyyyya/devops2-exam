@@ -1,17 +1,26 @@
 name: "Task 3: Build & Deploy App"
 
 on:
-  workflow_dispatch: # Запуск вручну кнопкою
+  workflow_dispatch:
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout App Repo
+      - name: Checkout App Repo (develop)
         uses: actions/checkout@v4
         with:
           repository: 'YulianSalo/devops-exam-pt2'
           ref: 'develop'
+          path: dev
+
+      - name: Checkout App Repo (release)
+        uses: actions/checkout@v4
+        with:
+          repository: 'YulianSalo/devops-exam-pt2'
+          ref: '1.0.0'
+          path: release
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -19,54 +28,80 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Dev (develop branch)
+      - name: Build and push Dev
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./dev
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop
 
-      - name: Build and push Release (tag 1.0.0)
+      - name: Build and push Release
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./release
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+
+    env:
+      TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Validate
+        working-directory: ./task1
         run: |
+          terraform init
+          terraform validate
+
+      - name: Extract Connection Data
+        working-directory: ./task1
+        run: |
+          IP=$(terraform output -raw droplet_ip)
+          echo "DROPLET_IP=$IP" >> $GITHUB_ENV
+          
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          terraform output -raw private_key > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.DROPLET_IP }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H $IP >> ~/.ssh/known_hosts 2>/dev/null
 
-      # ВИМОГА: Перевірка правильності без розгортання
-      - name: K8s Dry Run Check
+      - name: Deploy Apps
         run: |
-          sed "s/{{ ENV_TYPE }}/check/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g; s/{{ NODE_PORT }}/30001/g" task3/deployment.yaml > check.yaml
-          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f - --dry-run=client" < check.yaml
+          # DEV
+          sed "s/{{ ENV_TYPE }}/dev/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g" task3/deployment.yaml > dev.yaml
+          
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl apply -f -" < dev.yaml
 
-      # РОЗГОРТАННЯ DEV (Порт 8002 через Port-Forward)
-      - name: Deploy Dev
-        run: |
-          sed "s/{{ ENV_TYPE }}/dev/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g; s/{{ NODE_PORT }}/30002/g" task3/deployment.yaml > dev_deploy.yaml
-          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f -" < dev_deploy.yaml
+          sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0|g" task3/deployment.yaml > release.yaml
+          
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl apply -f -" < release.yaml
 
-      # РОЗГОРТАННЯ RELEASE (Порт 8003 через Port-Forward)
-      - name: Deploy Release
+      - name: Wait for Pods
         run: |
-          sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0|g; s/{{ NODE_PORT }}/30003/g" task3/deployment.yaml > release_deploy.yaml
-          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f -" < release_deploy.yaml
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
+            kubectl wait --for=condition=available deployment/app-dev -n ns-dev --timeout=120s
+            kubectl wait --for=condition=available deployment/app-release -n ns-release --timeout=120s
+          "
 
-      # ВИМОГА: Port-forward для доступу
-      - name: Expose Applications
+      - name: Start Port Forwarding
         run: |
-          ssh root@${{ secrets.DROPLET_IP }} "pkill -f 'port-forward' || true"
-          ssh root@${{ secrets.DROPLET_IP }} "nohup kubectl port-forward --address 0.0.0.0 service/app-service-dev 8002:80 > /dev/null 2>&1 &"
-          ssh root@${{ secrets.DROPLET_IP }} "nohup kubectl port-forward --address 0.0.0.0 service/app-service-release 8003:80 > /dev/null 2>&1 &"
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
+            nohup kubectl port-forward svc/app-service-dev 8002:80 -n ns-dev --address 0.0.0.0 > dev.log 2>&1 &
+            nohup kubectl port-forward svc/app-service-release 8003:80 -n ns-release --address 0.0.0.0 > release.log 2>&1 &
+          "
+
+      - name: Show URLs
+        run: |
+          echo "DEV: http://${{ env.DROPLET_IP }}:8002"
+          echo "RELEASE: http://${{ env.DROPLET_IP }}:8003"
