@@ -1,0 +1,72 @@
+name: "Task 3: Build & Deploy App"
+
+on:
+  workflow_dispatch: # Запуск вручну кнопкою
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout App Repo
+        uses: actions/checkout@v4
+        with:
+          repository: 'YulianSalo/devops-exam-pt2'
+          ref: 'develop'
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Dev (develop branch)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop
+
+      - name: Build and push Release (tag 1.0.0)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.DROPLET_IP }} >> ~/.ssh/known_hosts
+
+      # ВИМОГА: Перевірка правильності без розгортання
+      - name: K8s Dry Run Check
+        run: |
+          sed "s/{{ ENV_TYPE }}/check/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g; s/{{ NODE_PORT }}/30001/g" task3/deployment.yaml > check.yaml
+          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f - --dry-run=client" < check.yaml
+
+      # РОЗГОРТАННЯ DEV (Порт 8002 через Port-Forward)
+      - name: Deploy Dev
+        run: |
+          sed "s/{{ ENV_TYPE }}/dev/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g; s/{{ NODE_PORT }}/30002/g" task3/deployment.yaml > dev_deploy.yaml
+          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f -" < dev_deploy.yaml
+
+      # РОЗГОРТАННЯ RELEASE (Порт 8003 через Port-Forward)
+      - name: Deploy Release
+        run: |
+          sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0|g; s/{{ NODE_PORT }}/30003/g" task3/deployment.yaml > release_deploy.yaml
+          ssh root@${{ secrets.DROPLET_IP }} "kubectl apply -f -" < release_deploy.yaml
+
+      # ВИМОГА: Port-forward для доступу
+      - name: Expose Applications
+        run: |
+          ssh root@${{ secrets.DROPLET_IP }} "pkill -f 'port-forward' || true"
+          ssh root@${{ secrets.DROPLET_IP }} "nohup kubectl port-forward --address 0.0.0.0 service/app-service-dev 8002:80 > /dev/null 2>&1 &"
+          ssh root@${{ secrets.DROPLET_IP }} "nohup kubectl port-forward --address 0.0.0.0 service/app-service-release 8003:80 > /dev/null 2>&1 &"
