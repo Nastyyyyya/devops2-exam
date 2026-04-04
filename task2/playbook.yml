@@ -28,6 +28,15 @@
       args:
         creates: /usr/local/bin/helm
 
-    - name: 5. Start Minikube with Proxy Access
+    - name: 5. Cleanup existing Minikube (to ensure fresh start)
+      shell: minikube delete --all --purge
+      ignore_errors: yes 
+
+    - name: 6. Start Minikube (Fully Automated)
       shell: |
-        minikube start --driver=docker --listen-address=0.0.0.0 --force
+        minikube start \
+          --driver=docker \
+          --listen-address=0.0.0.0 \
+          --force \
+          --memory=4096mb \
+          --cpus=2

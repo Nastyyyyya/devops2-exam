@@ -58,7 +58,7 @@ data "digitalocean_vpc" "existing_vpc" {
 resource "digitalocean_droplet" "paslavska_node" {
   name     = "paslavska-node"
   region   = "fra1"
-  size     = "s-2vcpu-4gb"
+  size     = "s-4vcpu-8gb"
   image    = "ubuntu-24-04-x64"
   vpc_uuid = data.digitalocean_vpc.existing_vpc.id
   ssh_keys = [digitalocean_ssh_key.paslavska_key.id]
