@@ -90,3 +90,7 @@ resource "digitalocean_firewall" "paslavska_firewall" {
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 }
+
+output "droplet_ip" {
+  value = digitalocean_droplet.paslavska_node.ipv4_address
+}
