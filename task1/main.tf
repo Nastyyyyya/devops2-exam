@@ -26,22 +26,35 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-# 1. Отримання даних про вже існуючу VPC
+# 1. Отримання даних про існуючу VPC
 data "digitalocean_vpc" "existing_vpc" {
   name = "paslavska-vpc"
 }
 
-# 2. Створення Droplet 
-resource "digitalocean_droplet" "node" {
-  name     = "paslavska-node"
-  region   = "fra1"
-  size     = "s-2vcpu-4gb" # 
-  image    = "ubuntu-24-04-x64" 
+# 2. Додавання SSH-ключа
+resource "digitalocean_ssh_key" "paslavska_key" {
+  name = "paslavska-key"
 
-  vpc_uuid = data.digitalocean_vpc.existing_vpc.id
+  # Зчитування публічного ключа з файлу
+  public_key = file("${path.module}/my_key.pub")
 }
 
-# 3. Налаштування Firewall
+# 3. Створення Droplet (ВМ)
+resource "digitalocean_droplet" "node" {
+  name   = "paslavska-node"
+  region = "fra1"
+  size   = "s-2vcpu-4gb"
+  image  = "ubuntu-24-04-x64"
+
+  vpc_uuid = data.digitalocean_vpc.existing_vpc.id
+
+  # Прив'язка SSH ключа
+  ssh_keys = [
+    digitalocean_ssh_key.paslavska_key.id
+  ]
+}
+
+# 4. Налаштування Firewall
 resource "digitalocean_firewall" "firewall" {
   name        = "paslavska-firewall"
   droplet_ids = [digitalocean_droplet.node.id]
@@ -71,7 +84,7 @@ resource "digitalocean_firewall" "firewall" {
     source_addresses = ["0.0.0.0/0"]
   }
 
-  # Вихідні підключення (всі порти)
+  # Вихідні підключення
   outbound_rule {
     protocol              = "tcp"
     port_range            = "1-65535"
