@@ -53,24 +53,31 @@
           --cpus=2
       register: minikube_res
 
-    - name: 7. Enable metrics-server addon
-      command: minikube addons enable metrics-server
+    - name: 7. Enable Minikube Addons
+      command: minikube addons enable {{ item }}
+      loop:
+        - metrics-server
+        - dashboard
 
-    - name: 8. Start Kubernetes API Proxy
+    - name: 8. Wait for Dashboard to be ready
+      shell: kubectl wait --namespace kubernetes-dashboard --for=condition=ready pod -l k8s-app=kubernetes-dashboard --timeout=60s
+      ignore_errors: yes
+
+    - name: 9. Start Kubernetes API Proxy
       shell: |
         nohup kubectl proxy --address='0.0.0.0' --accept-hosts='.*' --port={{ proxy_port }} > /tmp/kubectl-proxy.log 2>&1 &
       async: 60
       poll: 0
-      # Ігноруємо помилку, якщо проксі вже висить на порту
       ignore_errors: yes
 
-    - name: 9. Get external IP of the VM
+    - name: 10. Get external IP of the VM
       shell: curl -s https://ifconfig.me
       register: external_ip
       changed_when: false
 
-    - name: 10. Show Minikube Dashboard URL
+    - name: 11. Show Minikube Dashboard URL
       debug:
         msg: 
-          - "Minikube Status: SUCCESS"
-          - "Dashboard URL: http://{{ external_ip.stdout }}:{{ proxy_port }}/api/v1/namespaces/kubernetes-dashboard/services/http:kubernetes-dashboard:/proxy/"
+          - "Minikube is READY"
+          - "1. Open this URL in browser: http://{{ external_ip.stdout }}:{{ proxy_port }}/api/v1/namespaces/kubernetes-dashboard/services/http:kubernetes-dashboard:/proxy/"
+          - "2. If you see 404, wait 30 seconds and refresh (pods are starting)."
