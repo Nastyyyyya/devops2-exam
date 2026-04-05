@@ -39,9 +39,12 @@
       args:
         creates: /usr/local/bin/helm
 
-    - name: 5. Cleanup existing Minikube
-      command: minikube delete --all --purge
-      ignore_errors: yes 
+    - name: 5. Cleanup existing Minikube and Config
+      shell: |
+        minikube delete --all --purge
+        rm -rf ~/.kube
+        rm -rf ~/.minikube
+      ignore_errors: yes
 
     - name: 6. Start Minikube (Fully Automated)
       shell: |
