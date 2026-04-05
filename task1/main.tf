@@ -30,12 +30,6 @@ resource "digitalocean_ssh_key" "paslavska_key" {
   public_key = tls_private_key.paslavska_ssh_key.public_key_openssh
 }
 
-resource "local_file" "paslavska_private_key" {
-  content         = tls_private_key.paslavska_ssh_key.private_key_pem
-  filename        = "${path.module}/id_rsa.pem"
-  file_permission = "0600"
-}
-
 # --- 2. VPC ---
 data "digitalocean_vpc" "existing_vpc" { name = "paslavska-vpc" }
 
@@ -47,10 +41,6 @@ resource "digitalocean_droplet" "paslavska_node" {
   image    = "ubuntu-24-04-x64"
   vpc_uuid = data.digitalocean_vpc.existing_vpc.id
   ssh_keys = [digitalocean_ssh_key.paslavska_key.id]
-
-  provisioner "local-exec" {
-    command = "echo '[paslavska_nodes]\n${self.ipv4_address} ansible_user=root ansible_ssh_private_key_file=task1/id_rsa.pem ansible_ssh_common_args=\"-o StrictHostKeyChecking=no\"' > ../task2/inventory.ini"
-  }
 }
 
 # --- Firewall ---
