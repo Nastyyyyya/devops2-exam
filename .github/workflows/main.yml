@@ -12,23 +12,33 @@ jobs:
       TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      SPACES_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_KEY }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET }}
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # --- КРОК 0: ВСТАНОВЛЕННЯ TERRAFORM (Це виправить вашу помилку) ---
+      # ВСТАНОВЛЕННЯ TERRAFORM
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_wrapper: false # Вимикаємо wrapper для коректної роботи local-exec
+          terraform_wrapper: false 
 
-      # --- КРОК 1: TERRAFORM (TASK 1) ---
-      - name: Terraform Init & Apply
+      # TERRAFORM (TASK 1) 
+      - name: Terraform Init
+        working-directory: ./task1
+        run: terraform init
+      
+      - name: Terraform Validate & Plan
         working-directory: ./task1
         run: |
-          terraform init
-          terraform apply -auto-approve
+            terraform validate
+            terraform plan -out=tfplan # Перевірка без розгортання
+      
+      - name: Terraform Apply
+        working-directory: ./task1
+        run: terraform apply -auto-approve tfplan
 
       # --- КРОК 2: ПІДГОТОВКА ANSIBLE ---
       - name: Install Ansible
@@ -37,7 +47,6 @@ jobs:
           sudo apt-get install -y ansible
 
       # --- КРОК 3: ПЕРЕВІРКА ANSIBLE (DRY RUN) ---
-      # Вимога: Перевірка правильності (Check mode)
       - name: Ansible Syntax Check & Dry Run
         run: |
           ansible-playbook -i task2/inventory.ini task2/playbook.yml --syntax-check
