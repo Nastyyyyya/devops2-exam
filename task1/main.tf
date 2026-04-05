@@ -53,10 +53,11 @@ resource "digitalocean_droplet" "paslavska_node" {
   }
 }
 
-# --- 4. FIREWALL ---
+# --- Firewall ---
 resource "digitalocean_firewall" "paslavska_firewall" {
   name        = "paslavska-firewall"
   droplet_ids = [digitalocean_droplet.paslavska_node.id]
+
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
@@ -64,14 +65,30 @@ resource "digitalocean_firewall" "paslavska_firewall" {
   }
   inbound_rule {
     protocol         = "tcp"
-    port_range       = "8000-8003" # Відкриваємо порти для застосунку
+    port_range       = "80"
     source_addresses = ["0.0.0.0/0"]
   }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "443"
+    source_addresses = ["0.0.0.0/0"]
+  }
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "8000-8003"
+    source_addresses = ["0.0.0.0/0"]
+  }
+
   outbound_rule {
     protocol              = "tcp"
     port_range            = "1-65535"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
+}
+
+resource "digitalocean_spaces_bucket" "paslavska_bucket" {
+  name   = "paslavska-bucket-exam"
+  region = data.digitalocean_vpc.existing_vpc.region
 }
 
 output "droplet_ip" {
