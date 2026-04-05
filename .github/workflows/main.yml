@@ -40,19 +40,33 @@ jobs:
         working-directory: ./task1
         run: terraform apply -auto-approve tfplan
 
-      # --- КРОК 2: ПІДГОТОВКА ANSIBLE ---
+      - name: Extract Droplet IP & Save Key
+        working-directory: ./task1
+        run: |
+          # Отримуємо IP з output Terraform
+          VM_IP=$(terraform output -raw droplet_ip)
+          echo "VM_IP=$VM_IP" >> $GITHUB_ENV
+          
+          # Зберігаємо приватний ключ для доступу Ansible
+          terraform output -raw private_key > id_rsa.pem
+          chmod 600 id_rsa.pem
+
+      # --- ANSIBLE (TASK 2) ---
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      # --- КРОК 3: ПЕРЕВІРКА ANSIBLE (DRY RUN) ---
-      - name: Ansible Syntax Check & Dry Run
+      - name: Create Dynamic Inventory
         run: |
-          ansible-playbook -i task2/inventory.ini task2/playbook.yml --syntax-check
-          ansible-playbook -i task2/inventory.ini task2/playbook.yml --check
+          echo "[paslavska_nodes]" > inventory.ini
+          echo "${{ env.VM_IP }} ansible_user=root ansible_ssh_private_key_file=task1/id_rsa.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'" >> inventory.ini
 
-      # --- КРОК 4: РЕАЛЬНЕ ВСТАНОВЛЕННЯ (TASK 2) ---
+      - name: Ansible Syntax & Dry Run
+        run: |
+          ansible-playbook -i inventory.ini task2/playbook.yml --syntax-check
+          ansible-playbook -i inventory.ini task2/playbook.yml --check
+
       - name: Ansible Real Deployment
         run: |
-          ansible-playbook -i task2/inventory.ini task2/playbook.yml
+          ansible-playbook -i inventory.ini task2/playbook.yml
