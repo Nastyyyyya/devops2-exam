@@ -40,3 +40,20 @@
           --force \
           --memory=4096mb \
           --cpus=2
+    
+    - name: 7. Enable metrics-server addon
+      shell: minikube addons enable metrics-server
+
+    - name: 8. Start Kubernetes API Proxy
+      shell: |
+        nohup kubectl proxy --address='0.0.0.0' --accept-hosts='.*' --port={{ proxy_port }} > /tmp/kubectl-proxy.log 2>&1 &
+      args:
+        creates: /tmp/kubectl-proxy.log
+
+    - name: 9. Get external IP of the VM
+      command: curl -s ifconfig.me
+      register: external_ip
+
+    - name: 10. Show Minikube Dashboard URL
+      debug:
+        msg: "Minikube Dashboard is available at http://{{ external_ip.stdout }}:{{ proxy_port }}/api/v1/namespaces/kubernetes-dashboard/services/http:kubernetes-dashboard:/proxy/"
