@@ -37,7 +37,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Dev
-        if: ${{ github.event.inputs.deploy_dev }}
+        if: ${{ github.event.inputs.deploy_dev == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./dev
@@ -45,7 +45,7 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop
 
       - name: Build and push Release
-        if: ${{ github.event.inputs.deploy_release }}
+        if: ${{ github.event.inputs.deploy_release == 'true' }}
         uses: docker/build-push-action@v5
         with:
           context: ./release
@@ -85,44 +85,45 @@ jobs:
           ssh-keyscan -H $IP >> ~/.ssh/known_hosts
 
       - name: Deploy DEV
-        if: ${{ github.event.inputs.deploy_dev }}
+        if: ${{ github.event.inputs.deploy_dev == 'true' }}
         run: |
           sed "s/{{ ENV_TYPE }}/dev/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g" task3/deployment.yaml > dev.yaml
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl apply -f -" < dev.yaml
 
       - name: Deploy RELEASE
-        if: ${{ github.event.inputs.deploy_release }}
+        if: ${{ github.event.inputs.deploy_release == 'true' }}
         run: |
           sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0|g" task3/deployment.yaml > release.yaml
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl apply -f -" < release.yaml
 
-      - name: Wait for Pods
+      - name: Wait for Pods (DEV)
+        if: ${{ github.event.inputs.deploy_dev == 'true' }}
+        continue-on-error: true
         run: |
-          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
-            if [ \"${{ github.event.inputs.deploy_dev }}\" = \"true\" ]; then
-              kubectl wait --for=condition=available deployment/app-dev -n ns-dev --timeout=120s
-            fi
-            if [ \"${{ github.event.inputs.deploy_release }}\" = \"true\" ]; then
-              kubectl wait --for=condition=available deployment/app-release -n ns-release --timeout=120s
-            fi
-          "
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl wait --for=condition=available deployment/app-dev -n ns-dev --timeout=120s"
+
+      - name: Wait for Pods (RELEASE)
+        if: ${{ github.event.inputs.deploy_release == 'true' }}
+        continue-on-error: true
+        run: |
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl wait --for=condition=available deployment/app-release -n ns-release --timeout=120s"
 
       - name: Start Port Forwarding
         run: |
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
-            # Вбиваємо старі процеси форвардингу, щоб звільнити порти
-            pkill kubectl || true
-            
+            # Очищуємо порти перед запуском нових проксі
             if [ \"${{ github.event.inputs.deploy_dev }}\" = \"true\" ]; then
+              fuser -k 8002/tcp || true
               nohup kubectl port-forward svc/app-service-dev 8002:80 -n ns-dev --address 0.0.0.0 > dev.log 2>&1 &
             fi
             
             if [ \"${{ github.event.inputs.deploy_release }}\" = \"true\" ]; then
+              fuser -k 8003/tcp || true
               nohup kubectl port-forward svc/app-service-release 8003:80 -n ns-release --address 0.0.0.0 > release.log 2>&1 &
             fi
             
-            sleep 2
-            ps aux | grep kubectl
+            sleep 5
+            ps aux | grep port-forward
           "
 
       - name: Show URLs and Status
