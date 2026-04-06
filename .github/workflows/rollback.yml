@@ -17,7 +17,7 @@ on:
 
 jobs:
   rollback:
-    if: github.event.inputs.confirm == 'yes'
+    if: ${{ github.event.inputs.confirm == 'yes' }}
     runs-on: ubuntu-latest
     env:
       TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
@@ -76,16 +76,25 @@ jobs:
       - name: Restart Port Forwarding
         run: |
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
-            # Вбиваємо старі процеси форвардингу
-            pkill kubectl || true
-            sleep 2
-            
-            # Запускаємо знову для того середовища, де робили ролбек
             ENV_TYPE='${{ github.event.inputs.environment }}'
-            PORT=$([ \"\$ENV_TYPE\" = \"dev\" ] && echo 8002 || echo 8003)
             
-            nohup kubectl port-forward svc/app-service-\$ENV_TYPE \$PORT:80 -n ns-\$ENV_TYPE --address 0.0.0.0 > rollback_port.log 2>&1 &
+            # Визначаємо порт на основі обраного середовища
+            if [ \"\$ENV_TYPE\" = \"dev\" ]; then
+              PORT=8002
+            else
+              PORT=8003
+            fi
+
+            echo \"Restarting port-forward for \$ENV_TYPE on port \$PORT...\"
+
+            # Вбиваємо ТІЛЬКИ той процес, що тримає конкретний порт (8002 або 8003)
+            # Це дозволяє іншому середовищу продовжувати роботу
+            fuser -k \$PORT/tcp || true
             
+            # Запускаємо форвардинг у фоні
+            nohup kubectl port-forward svc/app-service-\$ENV_TYPE \$PORT:80 -n ns-\$ENV_TYPE --address 0.0.0.0 > rollback_\$ENV_TYPE.log 2>&1 &
+            
+            # Даємо час на ініціалізацію процесу
             sleep 5
             ps aux | grep kubectl
           "
