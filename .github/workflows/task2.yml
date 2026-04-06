@@ -41,6 +41,12 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ env.VM_IP }} >> ~/.ssh/known_hosts
 
-      - name: Run Ansible Playbook
+      - name: Validate Ansible Syntax & Dry Run
+        run: |
+          ansible-playbook -i task2/inventory.ini task2/playbook.yml --syntax-check
+          ansible-playbook -i task2/inventory.ini task2/playbook.yml --private-key ${{ env.SSH_KEY_PATH }} --check
+
+      - name: Run Ansible Playbook (Real Install)
+        if: success()
         run: |
           ansible-playbook -i task2/inventory.ini task2/playbook.yml --private-key ${{ env.SSH_KEY_PATH }}
