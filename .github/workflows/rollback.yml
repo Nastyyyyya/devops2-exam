@@ -1,0 +1,74 @@
+name: "Task 3: Rollback App"
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Оберіть середовище для відкату'
+        required: true
+        type: choice
+        options:
+          - dev
+          - release
+      confirm:
+        description: 'Підтвердіть відкат (yes)'
+        required: true
+        default: 'no'
+
+jobs:
+  rollback:
+    if: github.event.inputs.confirm == 'yes'
+    runs-on: ubuntu-latest
+    env:
+      TF_VAR_do_token: ${{ secrets.DO_TOKEN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: ./task1
+        run: terraform init
+
+      - name: Extract Connection Data
+        id: connection
+        working-directory: ./task1
+        run: |
+          IP=$(terraform output -raw droplet_ip)
+          echo "DROPLET_IP=$IP" >> $GITHUB_ENV
+          mkdir -p ~/.ssh
+          terraform output -raw private_key > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $IP >> ~/.ssh/known_hosts
+
+      - name: Execute Kubernetes Rollback
+        run: |
+          ENV_TYPE="${{ github.event.inputs.environment }}"
+          NAMESPACE="ns-$ENV_TYPE"
+          DEPLOYMENT="app-$ENV_TYPE"
+          
+          echo "Starting rollback for $DEPLOYMENT in namespace $NAMESPACE..."
+          
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
+            # Відкат до попередньої ревізії
+            kubectl rollout undo deployment/$DEPLOYMENT -n $NAMESPACE
+            
+            # Очікування стабілізації
+            kubectl rollout status deployment/$DEPLOYMENT -n $NAMESPACE --timeout=60s
+          "
+
+      - name: Verify Status
+        run: |
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
+            echo '### Поточний стан подів у ns-${{ github.event.inputs.environment }}:'
+            kubectl get pods -n ns-${{ github.event.inputs.environment }} -o wide
+            echo '### Історія ревізій:'
+            kubectl rollout history deployment/app-${{ github.event.inputs.environment }} -n ns-${{ github.event.inputs.environment }}
+          "
