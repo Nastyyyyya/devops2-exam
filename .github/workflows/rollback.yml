@@ -72,3 +72,20 @@ jobs:
             echo '### Історія ревізій:'
             kubectl rollout history deployment/app-${{ github.event.inputs.environment }} -n ns-${{ github.event.inputs.environment }}
           "
+
+      - name: Restart Port Forwarding
+        run: |
+          ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
+            # Вбиваємо старі процеси форвардингу
+            pkill kubectl || true
+            sleep 2
+            
+            # Запускаємо знову для того середовища, де робили ролбек
+            ENV_TYPE='${{ github.event.inputs.environment }}'
+            PORT=$([ \"\$ENV_TYPE\" = \"dev\" ] && echo 8002 || echo 8003)
+            
+            nohup kubectl port-forward svc/app-service-\$ENV_TYPE \$PORT:80 -n ns-\$ENV_TYPE --address 0.0.0.0 > rollback_port.log 2>&1 &
+            
+            sleep 5
+            ps aux | grep kubectl
+          "
