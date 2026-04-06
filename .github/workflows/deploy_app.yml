@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'YulianSalo/devops-exam-pt2'
-          ref: 'develop'
+          ref: '1.0.0'
           path: release
 
       - name: Login to Docker Hub
@@ -50,7 +50,7 @@ jobs:
         with:
           context: ./release
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:devops
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0
 
   deploy:
     needs: build-and-push
@@ -93,7 +93,7 @@ jobs:
       - name: Deploy RELEASE
         if: ${{ github.event.inputs.deploy_release }}
         run: |
-          sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:develop|g" task3/deployment.yaml > release.yaml
+          sed "s/{{ ENV_TYPE }}/release/g; s|{{ IMAGE_TAG }}|${{ secrets.DOCKERHUB_USERNAME }}/devops-app:1.0.0|g" task3/deployment.yaml > release.yaml
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "kubectl apply -f -" < release.yaml
 
       - name: Wait for Pods
