@@ -67,8 +67,10 @@
       ignore_errors: yes
 
     - name: Kill existing kubectl proxy
-      shell: pkill -f "kubectl proxy"
-      ignore_errors: yes
+      shell: "pkill -f 'kubectl proxy' || true"
+      register: kill_result
+      changed_when: kill_result.rc == 0
+      failed_when: false
 
     - name: 9. Start Kubernetes API Proxy
       shell: |
