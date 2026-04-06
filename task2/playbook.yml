@@ -3,12 +3,12 @@
   hosts: paslavska_nodes
   become: yes
   vars:
-    proxy_port: 8001 
+    proxy_port: 8001
 
   tasks:
     - name: 1. Install Core Dependencies
       apt:
-        name: 
+        name:
           - apt-transport-https
           - ca-certificates
           - curl
@@ -66,6 +66,10 @@
       shell: kubectl wait --namespace kubernetes-dashboard --for=condition=ready pod -l k8s-app=kubernetes-dashboard --timeout=60s
       ignore_errors: yes
 
+    - name: Kill existing kubectl proxy
+      shell: pkill -f "kubectl proxy"
+      ignore_errors: yes
+
     - name: 9. Start Kubernetes API Proxy
       shell: |
         nohup kubectl proxy --address='0.0.0.0' --accept-hosts='.*' --port={{ proxy_port }} > /tmp/kubectl-proxy.log 2>&1 &
@@ -80,7 +84,7 @@
 
     - name: 11. Show Minikube Dashboard URL
       debug:
-        msg: 
+        msg:
           - "Minikube is READY"
           - "1. Open this URL in browser: http://{{ external_ip.stdout }}:{{ proxy_port }}/api/v1/namespaces/kubernetes-dashboard/services/http:kubernetes-dashboard:/proxy/"
           - "2. If you see 404, wait 30 seconds and refresh (pods are starting)."
