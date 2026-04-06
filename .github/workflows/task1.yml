@@ -38,14 +38,18 @@ jobs:
         working-directory: ./task1
         run: terraform apply -auto-approve tfplan
 
-      - name: Extract Droplet IP & Save Key
+      - name: Save Infrastructure Data
         working-directory: ./task1
         run: |
-          # Отримуємо IP з output Terraform
-          VM_IP=$(terraform output -raw droplet_ip)
-          echo "VM_IP=$VM_IP" >> $GITHUB_ENV
+          # Отримуємо дані з Terraform
+          terraform output -raw droplet_ip > vm_ip.txt
+          terraform output -raw private_key > id_rsa
+          chmod 600 id_rsa
 
-          # Зберігаємо приватний ключ для доступу Ansible
-          terraform output -raw private_key > id_rsa.pem
-          chmod 600 id_rsa.pem
-
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: |
+            task1/vm_ip.txt
+            task1/id_rsa

@@ -1,4 +1,4 @@
-name: Task2 Ansible Setup
+name: "Task 2: Ansible Deploy"
 
 on:
   workflow_dispatch:
@@ -6,27 +6,35 @@ on:
 jobs:
   ansible:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Install Ansible
-        run: sudo apt update && sudo apt install -y ansible
+      - name: Download Terraform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-outputs
+          path: terraform_data
 
-      - name: Setup SSH key
+      - name: Prepare SSH and Inventory
         run: |
+          # 1. Налаштування SSH ключа
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 159.89.12.21 >> ~/.ssh/known_hosts
+          cp terraform_data/id_rsa ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-      - name: Create inventory
+          # 2. Отримання IP
+          VM_IP=$(cat terraform_data/vm_ip.txt)
+          echo "VM_IP=$VM_IP" >> $GITHUB_ENV
+
+          # 3. Додавання в known_hosts, щоб не було помилок підключення
+          ssh-keyscan -H $VM_IP >> ~/.ssh/known_hosts
+
+          # 4. Створення інвентаря (група має збігатися з плейбуком!)
+          mkdir -p task2
+          echo "[paslavska_nodes]" > task2/inventory.ini
+          echo "node1 ansible_host=$VM_IP ansible_user=root" >> task2/inventory.ini
+
+      - name: Run Ansible Playbook
         run: |
-          echo "[minikube]" > task2/inventory.ini
-          echo "node1 ansible_host=159.89.12.21 ansible_user=root" >> task2/inventory.ini
-
-      - name: Test connection
-        run: ansible all -i task2/inventory.ini -m ping --private-key ~/.ssh/id_ed25519
-
-      - name: Run playbook
-        run: ansible-playbook -i task2/inventory.ini task2/playbook.yml --private-key ~/.ssh/id_ed25519
+          ansible-playbook -i task2/inventory.ini task2/playbook.yml --private-key ~/.ssh/id_rsa
