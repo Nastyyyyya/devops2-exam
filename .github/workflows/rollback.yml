@@ -1,19 +1,19 @@
-name: "Task 3: Rollback App"
+name: "Rollback"
 
 on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Оберіть середовище для відкату'
+        description: "Оберіть середовище для відкату"
         required: true
         type: choice
         options:
           - dev
           - release
       confirm:
-        description: 'Підтвердіть відкат (yes)'
+        description: "Підтвердіть відкат (yes)"
         required: true
-        default: 'no'
+        default: "no"
 
 jobs:
   rollback:
@@ -53,9 +53,9 @@ jobs:
           ENV_TYPE="${{ github.event.inputs.environment }}"
           NAMESPACE="ns-$ENV_TYPE"
           DEPLOYMENT="app-$ENV_TYPE"
-          
+
           echo "Starting rollback for $DEPLOYMENT in namespace $NAMESPACE..."
-          
+
           ssh -i ~/.ssh/id_rsa root@${{ env.DROPLET_IP }} "
             # Відкат до попередньої ревізії
             kubectl rollout undo deployment/$DEPLOYMENT -n $NAMESPACE

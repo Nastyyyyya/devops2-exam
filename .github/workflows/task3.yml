@@ -1,4 +1,4 @@
-name: "Task 3: Build & Deploy App"
+name: "Task 3: Build and Deploy App"
 
 on:
   workflow_dispatch:
